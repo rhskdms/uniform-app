@@ -1,0 +1,460 @@
+"use client";
+
+import { useState, useRef } from "react";
+
+type Submission = {
+  id: string;
+  studentName: string;
+  number: string;
+  date: string;
+  photoUrl?: string;
+  submittedAt: string;
+  status: "pending" | "approved" | "rejected";
+  approvedAt?: string;
+};
+
+const ADMIN_PASSWORD = "98765";
+
+const DAYS_KO = ["일", "월", "화", "수", "목", "금", "토"];
+
+function getDayOfWeek(year: number, month: number, day: number) {
+  return DAYS_KO[new Date(year, month - 1, day).getDay()];
+}
+
+function getDaysInMonth(year: number, month: number) {
+  return new Date(year, month, 0).getDate();
+}
+
+const TODAY = new Date();
+const YEAR_OPTIONS = [TODAY.getFullYear() - 1, TODAY.getFullYear()];
+const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => i + 1);
+
+const SAMPLE_DATE = `${TODAY.getFullYear()}-${String(TODAY.getMonth() + 1).padStart(2, "0")}-${String(TODAY.getDate() - 1).padStart(2, "0")} (${DAYS_KO[new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate() - 1).getDay()]})`;
+
+const INITIAL_SUBMISSIONS: Submission[] = [
+  { id: "1", studentName: "김지수", number: "12", date: SAMPLE_DATE, submittedAt: "2026-09-04 08:32", status: "pending" },
+  { id: "2", studentName: "박민준", number: "7",  date: SAMPLE_DATE, submittedAt: "2026-09-04 08:45", status: "pending" },
+  { id: "3", studentName: "이서연", number: "23", date: "2026-09-03 (수)", submittedAt: "2026-09-03 09:10", status: "approved", approvedAt: "2026-09-03 10:05" },
+  { id: "4", studentName: "최현우", number: "31", date: "2026-09-02 (화)", submittedAt: "2026-09-02 08:55", status: "approved", approvedAt: "2026-09-02 09:50" },
+  { id: "5", studentName: "이서연", number: "23", date: "2026-09-02 (화)", submittedAt: "2026-09-02 08:20", status: "approved", approvedAt: "2026-09-02 09:30" },
+];
+
+function getUniformCounts(submissions: Submission[]) {
+  const map: Record<string, { studentName: string; number: string; count: number }> = {};
+  for (const s of submissions) {
+    if (s.status === "approved") {
+      const key = `${s.studentName}-${s.number}`;
+      if (!map[key]) map[key] = { studentName: s.studentName, number: s.number, count: 0 };
+      map[key].count++;
+    }
+  }
+  return Object.values(map).sort((a, b) => b.count - a.count);
+}
+
+function nowString() {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")} ${String(n.getHours()).padStart(2,"0")}:${String(n.getMinutes()).padStart(2,"0")}`;
+}
+
+// ——— Student View ———
+function StudentView({ onSubmit }: { onSubmit: (s: Omit<Submission, "id" | "status">) => void }) {
+  const [name, setName]       = useState("");
+  const [number, setNumber]   = useState("");
+  const [month, setMonth]     = useState(String(TODAY.getMonth() + 1));
+  const [day, setDay]         = useState(String(TODAY.getDate()));
+  const [preview, setPreview] = useState<string | null>(null);
+  const [submitted, setSubmitted] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const currentYear = TODAY.getFullYear();
+  const maxDay = getDaysInMonth(currentYear, Number(month));
+  const safeDay = Math.min(Number(day), maxDay);
+  const dayOfWeek = getDayOfWeek(currentYear, Number(month), safeDay);
+  const dateString = `${currentYear}-${String(month).padStart(2,"0")}-${String(safeDay).padStart(2,"0")} (${dayOfWeek})`;
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name || !number) return;
+    onSubmit({ studentName: name, number, date: dateString, photoUrl: preview ?? undefined, submittedAt: nowString() });
+    setSubmitted(true);
+  }
+
+  function reset() {
+    setSubmitted(false); setName(""); setNumber(""); setPreview(null);
+    setMonth(String(TODAY.getMonth()+1)); setDay(String(TODAY.getDate()));
+  }
+
+  if (submitted) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-6 py-20 px-4">
+        <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center">
+          <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+        <div className="text-center">
+          <p className="text-xl font-semibold text-gray-800" style={{ fontFamily: "DM Sans, sans-serif" }}>제출 완료!</p>
+          <p className="text-gray-500 mt-1 text-sm">관리자 승인 후 교복 착용 횟수에 반영됩니다.</p>
+        </div>
+        <button onClick={reset} className="px-5 py-2.5 bg-[#1a56db] text-white rounded-xl text-sm font-medium hover:bg-[#1343b0] active:bg-[#1343b0] transition-colors">
+          다시 제출하기
+        </button>
+      </div>
+    );
+  }
+
+  const selectCls = "border border-[#dde1e9] rounded-xl px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a56db]/30 focus:border-[#1a56db] transition bg-white w-full appearance-none";
+
+  return (
+    <form onSubmit={handleSubmit} className="max-w-md mx-auto py-8 px-5 flex flex-col gap-5">
+      <div>
+        <h2 className="text-2xl font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>교복 착용 인증</h2>
+        <p className="text-sm text-gray-500 mt-1">정보를 입력하고 제출하세요. 관리자 확인 후 승인됩니다.</p>
+      </div>
+
+      {/* 이름 */}
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">이름</label>
+        <input
+          value={name} onChange={(e) => setName(e.target.value)}
+          placeholder="홍길동" required
+          className="border border-[#dde1e9] rounded-xl px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1a56db]/30 focus:border-[#1a56db] transition bg-white"
+        />
+      </div>
+
+      {/* 번호 */}
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">번호</label>
+        <div className="relative">
+          <select value={number} onChange={(e) => setNumber(e.target.value)} required className={selectCls}>
+            <option value="">선택하세요</option>
+            {Array.from({ length: 24 }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={String(n)}>{n}번</option>
+            ))}
+          </select>
+          <ChevronDown />
+        </div>
+      </div>
+
+      {/* 날짜 — 년/월/일 분리 */}
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+          날짜 <span className="text-[#1a56db] font-bold ml-1">{dayOfWeek}요일</span>
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="relative">
+            <select value={month} onChange={(e) => setMonth(e.target.value)} className={selectCls}>
+              {MONTH_OPTIONS.map((m) => <option key={m} value={String(m)}>{m}월</option>)}
+            </select>
+            <ChevronDown />
+          </div>
+          <div className="relative">
+            <select value={String(safeDay)} onChange={(e) => setDay(e.target.value)} className={selectCls}>
+              {Array.from({ length: maxDay }, (_, i) => i + 1).map((d) => (
+                <option key={d} value={String(d)}>{d}일</option>
+              ))}
+            </select>
+            <ChevronDown />
+          </div>
+        </div>
+      </div>
+
+      {/* 사진 업로드 */}
+      <div className="flex flex-col gap-1.5">
+        <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">교복 착용 사진</label>
+        <div
+          onClick={() => fileRef.current?.click()}
+          className="border-2 border-dashed border-[#dde1e9] rounded-2xl overflow-hidden cursor-pointer hover:border-[#1a56db] active:border-[#1a56db] transition-colors bg-white"
+        >
+          {preview ? (
+            <img src={preview} alt="미리보기" className="w-full h-56 object-cover" />
+          ) : (
+            <div className="flex flex-col items-center justify-center h-44 gap-2 text-gray-400 select-none">
+              <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+              </svg>
+              <span className="text-sm font-medium">탭하여 사진 선택</span>
+              <span className="text-xs">카메라 또는 갤러리</span>
+            </div>
+          )}
+        </div>
+        <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={handleFile} className="hidden" />
+        {preview && (
+          <button type="button" onClick={() => { setPreview(null); if (fileRef.current) fileRef.current.value = ""; }}
+            className="text-xs text-gray-400 underline self-start">사진 다시 선택</button>
+        )}
+      </div>
+
+      <button
+        type="submit"
+        disabled={!name || !number}
+        className="w-full py-3.5 bg-[#1a56db] text-white rounded-xl font-semibold text-base hover:bg-[#1343b0] active:bg-[#1343b0] transition-colors disabled:opacity-40 disabled:cursor-not-allowed mt-1"
+        style={{ fontFamily: "DM Sans, sans-serif" }}
+      >
+        제출하기
+      </button>
+    </form>
+  );
+}
+
+function ChevronDown() {
+  return (
+    <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+    </svg>
+  );
+}
+
+// ——— Admin Password Gate ———
+function AdminGate({ onUnlock }: { onUnlock: () => void }) {
+  const [pw, setPw] = useState("");
+  const [error, setError] = useState(false);
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (pw === ADMIN_PASSWORD) { onUnlock(); }
+    else { setError(true); setPw(""); }
+  }
+
+  return (
+    <div className="flex items-center justify-center h-full px-5">
+      <form onSubmit={handleSubmit} className="bg-white border border-[#dde1e9] rounded-2xl p-8 w-full max-w-xs shadow-sm flex flex-col gap-4">
+        <div className="flex items-center gap-3 mb-1">
+          <div className="w-9 h-9 bg-[#1a56db] rounded-xl flex items-center justify-center shrink-0">
+            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+            </svg>
+          </div>
+          <div>
+            <p className="font-bold text-gray-900 text-base" style={{ fontFamily: "DM Sans, sans-serif" }}>관리자 로그인</p>
+            <p className="text-xs text-gray-400">비밀번호를 입력하세요</p>
+          </div>
+        </div>
+        <input
+          type="password" value={pw}
+          onChange={(e) => { setPw(e.target.value); setError(false); }}
+          placeholder="비밀번호" autoFocus
+          className={`border rounded-xl px-3 py-3 text-sm focus:outline-none focus:ring-2 transition bg-white ${
+            error ? "border-red-400 focus:ring-red-200 focus:border-red-400" : "border-[#dde1e9] focus:ring-[#1a56db]/30 focus:border-[#1a56db]"
+          }`}
+        />
+        {error && <p className="text-xs text-red-500 -mt-2">비밀번호가 올바르지 않습니다.</p>}
+        <button type="submit" className="w-full py-3 bg-[#1a56db] text-white rounded-xl font-semibold text-sm hover:bg-[#1343b0] active:bg-[#1343b0] transition-colors" style={{ fontFamily: "DM Sans, sans-serif" }}>
+          확인
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// ——— Admin View ———
+function AdminView({ submissions, onApprove, onReject }: {
+  submissions: Submission[];
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
+}) {
+  const [tab, setTab] = useState<"pending" | "history" | "stats">("pending");
+  const [lightbox, setLightbox] = useState<string | null>(null);
+
+  const pending  = submissions.filter((s) => s.status === "pending");
+  const approved = submissions.filter((s) => s.status === "approved");
+  const counts   = getUniformCounts(submissions);
+
+  const tabBtn = (key: typeof tab, label: string, count: number | null) => (
+    <button
+      key={key} onClick={() => setTab(key)}
+      className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+        tab === key ? "border-[#1a56db] text-[#1a56db]" : "border-transparent text-gray-500 hover:text-gray-700"
+      }`}
+    >
+      {label}
+      {count !== null && (
+        <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${tab === key ? "bg-[#1a56db]/10 text-[#1a56db]" : "bg-gray-100 text-gray-500"}`}>{count}</span>
+      )}
+    </button>
+  );
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Tab bar */}
+      <div className="flex bg-white border-b border-[#dde1e9] shrink-0">
+        {tabBtn("pending",  "승인 대기", pending.length)}
+        {tabBtn("history",  "승인 내역", approved.length)}
+        {tabBtn("stats",    "착용 현황", null)}
+      </div>
+
+      <div className="flex-1 overflow-auto p-4">
+        {tab === "pending" && (
+          <>
+            <p className="text-sm font-semibold text-gray-700 mb-3">승인 대기 {pending.length}건</p>
+            {pending.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-gray-400">
+                <svg className="w-10 h-10 mb-2 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <p className="text-sm">대기 중인 제출이 없습니다</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {pending.map((s) => (
+                  <div key={s.id} className="bg-white rounded-2xl border border-[#dde1e9] overflow-hidden">
+                    {s.photoUrl && (
+                      <img
+                        src={s.photoUrl} alt={s.studentName}
+                        className="w-full h-52 object-cover cursor-pointer bg-gray-100"
+                        onClick={() => setLightbox(s.photoUrl!)}
+                      />
+                    )}
+                    <div className="p-4">
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <div>
+                          <p className="font-bold text-gray-900" style={{ fontFamily: "DM Sans, sans-serif" }}>{s.studentName}</p>
+                          <p className="text-sm text-gray-500">{s.number}번 · {s.date}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">{s.submittedAt} 제출</p>
+                        </div>
+                        <span className="text-xs bg-amber-100 text-amber-700 font-semibold px-2 py-1 rounded-full shrink-0">대기중</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => onApprove(s.id)} className="flex-1 py-2.5 bg-[#1a56db] text-white rounded-xl text-sm font-semibold hover:bg-[#1343b0] active:bg-[#1343b0] transition-colors">승인</button>
+                        <button onClick={() => onReject(s.id)} className="flex-1 py-2.5 bg-white border border-red-200 text-red-500 rounded-xl text-sm font-semibold hover:bg-red-50 active:bg-red-50 transition-colors">거절</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {tab === "history" && (
+          <>
+            <p className="text-sm font-semibold text-gray-700 mb-3">승인 내역 {approved.length}건</p>
+            <div className="flex flex-col gap-2">
+              {approved.map((s) => (
+                <div key={s.id} className="bg-white rounded-2xl border border-[#dde1e9] p-4 flex items-center gap-3">
+                  {s.photoUrl ? (
+                    <img src={s.photoUrl} alt={s.studentName} className="w-12 h-12 rounded-xl object-cover bg-gray-100 shrink-0 cursor-pointer" onClick={() => setLightbox(s.photoUrl!)} />
+                  ) : (
+                    <div className="w-12 h-12 rounded-xl bg-gray-100 shrink-0 flex items-center justify-center text-gray-300">
+                      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 text-sm truncate">{s.studentName} <span className="font-normal text-gray-500">{s.number}번</span></p>
+                    <p className="text-xs text-gray-500">{s.date}</p>
+                    <p className="text-xs text-gray-400">승인 {s.approvedAt}</p>
+                  </div>
+                  <span className="text-xs bg-green-100 text-green-700 font-semibold px-2 py-1 rounded-full shrink-0">승인</span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {tab === "stats" && (
+          <>
+            <p className="text-sm font-semibold text-gray-700 mb-3">착용 현황</p>
+            <div className="flex flex-col gap-2">
+              {counts.map((r, i) => (
+                <div key={`${r.studentName}-${r.number}`} className="bg-white rounded-2xl border border-[#dde1e9] p-4 flex items-center gap-4">
+                  <span className="text-xs text-gray-400 font-mono w-5 text-center shrink-0">{i + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 text-sm">{r.studentName} <span className="font-normal text-gray-500">{r.number}번</span></p>
+                    <div className="mt-1.5 h-1.5 rounded-full bg-gray-100">
+                      <div className="h-full rounded-full bg-[#1a56db] transition-all" style={{ width: `${(r.count / (counts[0]?.count || 1)) * 100}%` }} />
+                    </div>
+                  </div>
+                  <div className="flex items-baseline gap-0.5 shrink-0">
+                    <span className="font-bold text-[#1a56db] text-lg" style={{ fontFamily: "DM Sans, sans-serif" }}>{r.count}</span>
+                    <span className="text-xs text-gray-400">회</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Lightbox */}
+      {lightbox && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setLightbox(null)}>
+          <img src={lightbox} alt="사진" className="max-w-full max-h-full rounded-2xl object-contain" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ——— Root App ———
+export default function App() {
+  const [view, setView]               = useState<"student" | "admin">("student");
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const [submissions, setSubmissions]  = useState<Submission[]>(INITIAL_SUBMISSIONS);
+
+  function handleSubmit(data: Omit<Submission, "id" | "status">) {
+    setSubmissions((prev) => [{ ...data, id: String(Date.now()), status: "pending" }, ...prev]);
+  }
+
+  function handleApprove(id: string) {
+    setSubmissions((prev) => prev.map((s) => s.id === id ? { ...s, status: "approved", approvedAt: nowString() } : s));
+  }
+
+  function handleReject(id: string) {
+    setSubmissions((prev) => prev.map((s) => s.id === id ? { ...s, status: "rejected" } : s));
+  }
+
+  function handleAdminTab() {
+    setView("admin");
+  }
+
+  return (
+    <div className="h-full flex flex-col bg-[#f5f6f8]">
+      {/* Header */}
+      <header className="bg-white border-b border-[#dde1e9] px-4 py-3 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 bg-[#1a56db] rounded-lg flex items-center justify-center shrink-0">
+            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
+          </div>
+          <span className="font-bold text-gray-900 text-sm" style={{ fontFamily: "DM Sans, sans-serif" }}>교복 착용 인증</span>
+        </div>
+        <div className="flex bg-gray-100 rounded-lg p-1 gap-1">
+          <button
+            onClick={() => setView("student")}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${view === "student" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}
+          >
+            학생
+          </button>
+          <button
+            onClick={handleAdminTab}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${view === "admin" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}
+          >
+            {!adminUnlocked && (
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+              </svg>
+            )}
+            관리자
+          </button>
+        </div>
+      </header>
+
+      <div className="flex-1 overflow-auto">
+        {view === "student" ? (
+          <StudentView onSubmit={handleSubmit} />
+        ) : adminUnlocked ? (
+          <AdminView submissions={submissions} onApprove={handleApprove} onReject={handleReject} />
+        ) : (
+          <AdminGate onUnlock={() => setAdminUnlocked(true)} />
+        )}
+      </div>
+    </div>
+  );
+}
